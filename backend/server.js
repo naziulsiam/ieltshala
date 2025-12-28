@@ -31,7 +31,7 @@ app.get('/api/health', (req, res) => {
 
 // Import routes
 try {
-  const authRoutes = require('./routes/auth');
+  const authRoutes = require('./src/routes/auth');
   app.use('/api/auth', authRoutes);
   console.log('✅ Auth routes loaded');
 } catch (err) {
@@ -39,7 +39,7 @@ try {
 }
 
 try {
-  const evaluationRoutes = require('./routes/evaluation');
+  const evaluationRoutes = require('./src/routes/evaluation');
   app.use('/api/evaluate', evaluationRoutes);
   console.log('✅ Evaluation routes loaded');
 } catch (err) {
@@ -47,7 +47,7 @@ try {
 }
 
 try {
-  const progressRoutes = require('./routes/progress');
+  const progressRoutes = require('./src/routes/progress');
   app.use('/api/progress', progressRoutes);
   console.log('✅ Progress routes loaded');
 } catch (err) {
@@ -55,7 +55,7 @@ try {
 }
 
 try {
-  const studyPlanRoutes = require('./routes/studyplan');
+  const studyPlanRoutes = require('./src/routes/studyplan');
   app.use('/api/studyplan', studyPlanRoutes);
   console.log('✅ Study plan routes loaded');
 } catch (err) {
@@ -63,7 +63,7 @@ try {
 }
 
 try {
-  const dashboardRoutes = require('./routes/dashboard');
+  const dashboardRoutes = require('./src/routes/dashboard');
   app.use('/api/dashboard', dashboardRoutes);
   console.log('✅ Dashboard routes loaded');
 } catch (err) {
@@ -71,7 +71,7 @@ try {
 }
 
 try {
-  const vocabularyRoutes = require('./routes/vocabulary');
+  const vocabularyRoutes = require('./src/routes/vocabulary');
   app.use('/api/vocabulary', vocabularyRoutes);
   console.log('✅ Vocabulary routes loaded');
 } catch (err) {
@@ -79,7 +79,7 @@ try {
 }
 
 try {
-  const adminRoutes = require('./routes/admin');
+  const adminRoutes = require('./src/routes/admin');
   app.use('/api/admin', adminRoutes);
   console.log('✅ Admin routes loaded');
 } catch (err) {

@@ -1,0 +1,31 @@
+{
+  "common": {
+    "login": "লগইন",
+    "register": "নিবন্ধন",
+    "logout": "লগআউট",
+    "submit": "জমা দিন",
+    "cancel": "বাতিল",
+    "save": "সংরক্ষণ"
+  },
+  "nav": {
+    "dashboard": "ড্যাশবোর্ড",
+    "speaking": "স্পিকিং",
+    "writing": "রাইটিং",
+    "reading": "রিডিং",
+    "listening": "লিসেনিং",
+    "vocabulary": "শব্দভান্ডার",
+    "mockTests": "মক টেস্ট",
+    "progress": "অগ্রগতি"
+  },
+  "dashboard": {
+    "welcome": "স্বাগতম",
+    "streak": "দিনের ধারাবাহিকতা",
+    "totalStudyTime": "মোট পড়াশোনার সময়"
+  },
+  "speaking": {
+    "title": "স্পিকিং অনুশীলন",
+    "startRecording": "রেকর্ডিং শুরু করুন",
+    "stopRecording": "রেকর্ডিং বন্ধ করুন",
+    "evaluate": "মূল্যায়ন পান"
+  }
+}

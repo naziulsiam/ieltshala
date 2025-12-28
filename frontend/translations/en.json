@@ -1,0 +1,31 @@
+{
+  "common": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "speaking": "Speaking",
+    "writing": "Writing",
+    "reading": "Reading",
+    "listening": "Listening",
+    "vocabulary": "Vocabulary",
+    "mockTests": "Mock Tests",
+    "progress": "Progress"
+  },
+  "dashboard": {
+    "welcome": "Welcome back",
+    "streak": "Day Streak",
+    "totalStudyTime": "Total Study Time"
+  },
+  "speaking": {
+    "title": "Speaking Practice",
+    "startRecording": "Start Recording",
+    "stopRecording": "Stop Recording",
+    "evaluate": "Get Evaluation"
+  }
+}

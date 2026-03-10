@@ -20,9 +20,9 @@ const AppLayout = () => {
   })();
 
   return (
-    <div className="min-h-screen flex w-full">
+    <div className="min-h-screen flex w-full overflow-x-hidden">
       <AppSidebar />
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         {/* Top bar (mobile: logo + icons, desktop: breadcrumb + icons) */}
         <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-sm border-b h-14 flex items-center px-4 md:px-6 gap-3">
           {/* Mobile logo */}

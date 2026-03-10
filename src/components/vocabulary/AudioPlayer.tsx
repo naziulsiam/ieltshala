@@ -61,7 +61,7 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
 
     return (
         <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
                 {/* Listen button (always available) */}
                 <button
                     onClick={() => isPlaying ? stop() : speak(false, 1)}
@@ -79,8 +79,8 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
                             setIsSlow(true); speak(true, 1);
                         }}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring ${isPremium
-                                ? "bg-accent/10 hover:bg-accent/15 text-accent"
-                                : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
+                            ? "bg-accent/10 hover:bg-accent/15 text-accent"
+                            : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
                             }`}
                     >
                         <Snail className="w-4 h-4" />
@@ -97,8 +97,8 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
                             speak(false, 3);
                         }}
                         className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring ${isPremium
-                                ? "bg-success/10 hover:bg-success/15 text-success"
-                                : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
+                            ? "bg-success/10 hover:bg-success/15 text-success"
+                            : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
                             }`}
                     >
                         <Repeat className="w-4 h-4" />

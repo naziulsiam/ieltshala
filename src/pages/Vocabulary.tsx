@@ -236,7 +236,7 @@ const Vocabulary = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[960px] mx-auto space-y-6 pb-28 md:pb-8">
+    <div className="p-4 md:p-6 max-w-[960px] mx-auto space-y-6 pb-28 md:pb-8 overflow-x-hidden">
       {/* Header with stats and daily goal */}
       <VocabularyHeader
         totalLearned={v.totalLearned}

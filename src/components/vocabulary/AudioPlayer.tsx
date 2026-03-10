@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Volume2, Snail, Repeat, Pause, Lock } from "lucide-react";
+import { Volume2, Snail, Repeat, Pause, Lock, Loader2 } from "lucide-react";
 import LockedOverlay from "./LockedOverlay";
+import { speakWithBrowser, getBestEnglishVoice, stopSpeaking, type TTSOptions } from "@/services/tts";
 
 interface AudioPlayerProps {
     word: string;
@@ -13,49 +14,84 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
     const [isPlaying, setIsPlaying] = useState(false);
     const [isSlow, setIsSlow] = useState(false);
     const [repeatCount, setRepeatCount] = useState(0);
-    const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-    const barsRef = useRef<HTMLDivElement>(null);
+    const [loading, setLoading] = useState(false);
+    const [voice, setVoice] = useState<SpeechSynthesisVoice | null>(null);
+    const repeatTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const stop = useCallback(() => {
-        window.speechSynthesis.cancel();
-        setIsPlaying(false);
-        setRepeatCount(0);
+    // Initialize best voice on mount
+    useEffect(() => {
+        const initVoice = () => {
+            const bestVoice = getBestEnglishVoice();
+            setVoice(bestVoice);
+        };
+
+        // Voices might not be loaded immediately
+        if (window.speechSynthesis.getVoices().length > 0) {
+            initVoice();
+        } else {
+            window.speechSynthesis.onvoiceschanged = initVoice;
+        }
+
+        return () => {
+            stopSpeaking();
+            if (repeatTimerRef.current) {
+                clearTimeout(repeatTimerRef.current);
+            }
+        };
     }, []);
 
-    useEffect(() => () => { window.speechSynthesis.cancel(); }, []);
+    const stop = useCallback(() => {
+        stopSpeaking();
+        setIsPlaying(false);
+        setIsSlow(false);
+        setRepeatCount(0);
+        setLoading(false);
+        if (repeatTimerRef.current) {
+            clearTimeout(repeatTimerRef.current);
+            repeatTimerRef.current = null;
+        }
+    }, []);
 
     const speak = useCallback((slow = false, repeats = 1) => {
-        window.speechSynthesis.cancel();
+        stopSpeaking();
+        setLoading(true);
+        setIsSlow(slow);
+
         let count = 0;
 
         const doSpeak = () => {
-            const u = new SpeechSynthesisUtterance(word);
-            u.lang = "en-GB";
-            u.rate = slow ? 0.55 : 0.85;
-            u.pitch = 1;
+            setLoading(false);
+            setIsPlaying(true);
+            setRepeatCount(repeats - count);
 
-            const voices = window.speechSynthesis.getVoices();
-            const brit = voices.find(v => v.lang === "en-GB") || voices.find(v => v.lang.startsWith("en"));
-            if (brit) u.voice = brit;
-
-            u.onstart = () => setIsPlaying(true);
-            u.onend = () => {
-                count++;
-                if (count < repeats) {
-                    setTimeout(doSpeak, 600);
-                } else {
+            speakWithBrowser(word, {
+                voice: voice || undefined,
+                rate: slow ? 0.6 : 0.85,
+                pitch: 1,
+                onStart: () => {
+                    setLoading(false);
+                    setIsPlaying(true);
+                },
+                onEnd: () => {
+                    count++;
+                    if (count < repeats) {
+                        repeatTimerRef.current = setTimeout(doSpeak, 800);
+                    } else {
+                        setIsPlaying(false);
+                        setRepeatCount(0);
+                        setIsSlow(false);
+                    }
+                },
+                onError: () => {
                     setIsPlaying(false);
+                    setLoading(false);
                     setRepeatCount(0);
-                }
-            };
-            u.onerror = () => { setIsPlaying(false); setRepeatCount(0); };
-            utteranceRef.current = u;
-            window.speechSynthesis.speak(u);
+                },
+            });
         };
 
-        setRepeatCount(repeats);
         doSpeak();
-    }, [word]);
+    }, [word, voice]);
 
     const syllables = word.replace(/([aeiou]+)/gi, "-$1").replace(/^-/, "").split("-").filter(Boolean);
 
@@ -65,10 +101,17 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
                 {/* Listen button (always available) */}
                 <button
                     onClick={() => isPlaying ? stop() : speak(false, 1)}
-                    className="flex items-center gap-2 bg-primary/10 hover:bg-primary/15 text-primary px-4 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring"
+                    disabled={loading}
+                    className="flex items-center gap-2 bg-primary/10 hover:bg-primary/15 text-primary px-4 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring disabled:opacity-50"
                 >
-                    {isPlaying && !isSlow ? <Pause className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    {isPlaying && !isSlow ? "Stop" : "Listen"}
+                    {loading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isPlaying && !isSlow ? (
+                        <Pause className="w-4 h-4" />
+                    ) : (
+                        <Volume2 className="w-4 h-4" />
+                    )}
+                    {loading ? "Loading..." : isPlaying && !isSlow ? "Stop" : "Listen"}
                 </button>
 
                 {/* Slow button (locked for free) */}
@@ -76,9 +119,10 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
                     <button
                         onClick={() => {
                             if (!isPremium) { onLockedFeatureClick?.("Slow Audio"); return; }
-                            setIsSlow(true); speak(true, 1);
+                            speak(true, 1);
                         }}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring ${isPremium
+                        disabled={loading}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring disabled:opacity-50 ${isPremium
                             ? "bg-accent/10 hover:bg-accent/15 text-accent"
                             : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
                             }`}
@@ -96,7 +140,8 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
                             if (!isPremium) { onLockedFeatureClick?.("Repeat Audio"); return; }
                             speak(false, 3);
                         }}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring ${isPremium
+                        disabled={loading}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all press focus-ring disabled:opacity-50 ${isPremium
                             ? "bg-success/10 hover:bg-success/15 text-success"
                             : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
                             }`}
@@ -110,14 +155,14 @@ const AudioPlayer = ({ word, phonetic, isPremium = true, onLockedFeatureClick }:
 
             {/* Visual waveform */}
             {isPlaying && (
-                <div ref={barsRef} className="flex items-center justify-center gap-[3px] h-8 px-2">
+                <div className="flex items-center justify-center gap-[3px] h-8 px-2">
                     {Array.from({ length: 20 }).map((_, i) => (
                         <div
                             key={i}
-                            className="w-[3px] bg-primary/60 rounded-full"
+                            className="w-[3px] bg-primary/60 rounded-full animate-pulse"
                             style={{
-                                animation: `waveform 0.8s ease-in-out ${i * 0.05}s infinite alternate`,
-                                height: `${8 + Math.random() * 20}px`,
+                                height: `${8 + Math.sin(Date.now() / 200 + i) * 12}px`,
+                                animationDelay: `${i * 0.05}s`,
                             }}
                         />
                     ))}

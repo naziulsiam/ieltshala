@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, Play, Clock, CheckCircle2, ChevronRight,
   RotateCcw, Sparkles, FileText, List, AlignLeft, ScanSearch,
-  Table2, PenLine, Timer, Highlighter
+  Table2, PenLine, Timer, Highlighter, Loader2, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ListItemSkeleton } from "@/components/ui/skeleton-loaders";
 import QuestionTypeBrowser from "@/components/QuestionTypeBrowser";
 import NextRecommendation from "@/components/NextRecommendation";
+import { usePassages, useUserReadingProgress, useReadingStats, type Passage } from "@/hooks/useReading";
+import { groqService, type ReadingPassage } from "@/services/groq";
+import { supabase } from "@/lib/supabase";
 
 /* ─── Question Types (2x3 Grid) ─── */
 const questionTypes = [
@@ -21,30 +24,6 @@ const questionTypes = [
   { id: "diagram", icon: Table2, label: "Diagram Labeling", count: 6, avgScore: "6.9", difficulty: 2, description: "Label parts of a diagram or flowchart using information from the text.", avgTime: "~1.5 min", commonMistakes: ["Not following the diagram's logical order", "Confusing similar-looking parts", "Missing specific technical terms from the passage"] },
 ];
 
-/* ─── Passages ─── */
-interface Passage {
-  id: string;
-  title: string;
-  type: string;
-  duration: string;
-  questions: number;
-  progress: number;
-  status: "new" | "in-progress" | "completed";
-  difficulty: "easy" | "medium" | "hard";
-  topicTag: string;
-}
-
-const passages: Passage[] = [
-  { id: "1", title: "The Rise of Urban Farming", type: "tfng", duration: "20 min", questions: 14, progress: 0, status: "new", difficulty: "medium", topicTag: "🌿 Environment" },
-  { id: "2", title: "Ancient Mesopotamia", type: "heading", duration: "20 min", questions: 13, progress: 100, status: "completed", difficulty: "medium", topicTag: "📜 History" },
-  { id: "3", title: "AI Ethics in Healthcare", type: "summary", duration: "20 min", questions: 14, progress: 60, status: "in-progress", difficulty: "hard", topicTag: "💻 Technology" },
-  { id: "4", title: "Ocean Acidification", type: "tfng", duration: "20 min", questions: 13, progress: 0, status: "new", difficulty: "hard", topicTag: "🌊 Science" },
-  { id: "5", title: "The Gig Economy", type: "mcq", duration: "20 min", questions: 14, progress: 0, status: "new", difficulty: "medium", topicTag: "💼 Work" },
-  { id: "6", title: "Renewable Energy Sources", type: "diagram", duration: "18 min", questions: 12, progress: 100, status: "completed", difficulty: "easy", topicTag: "⚡ Science" },
-  { id: "7", title: "Memory & Learning", type: "short", duration: "20 min", questions: 13, progress: 0, status: "new", difficulty: "easy", topicTag: "🧠 Psychology" },
-  { id: "8", title: "Global Migration Patterns", type: "heading", duration: "20 min", questions: 14, progress: 40, status: "in-progress", difficulty: "medium", topicTag: "🌍 Social" },
-];
-
 const difficultyConfig = {
   easy: { label: "Easy", bg: "bg-success/10", text: "text-success", dot: "bg-success" },
   medium: { label: "Medium", bg: "bg-warning/10", text: "text-warning", dot: "bg-warning" },
@@ -52,35 +31,51 @@ const difficultyConfig = {
 };
 
 /* ─── Reading Player with Timer, Highlights, Question Dots ─── */
-const passageText = [
-  "The rapid growth of urban populations worldwide has given rise to an innovative approach to food production known as urban farming. This practice, which involves cultivating crops and raising animals within city boundaries, has gained significant momentum in recent years as cities grapple with food security challenges.",
-  "Unlike traditional agriculture, urban farming utilizes unconventional spaces such as rooftops, abandoned lots, and vertical structures. Proponents argue that this approach reduces transportation costs and carbon emissions associated with moving food from rural areas to urban centers. Furthermore, it provides fresh produce to communities that might otherwise lack access to nutritious food options.",
-  "Critics, however, point out that urban farming cannot match the scale of conventional agriculture. The limited space available in cities means that production volumes remain relatively small compared to rural farms. Additionally, concerns about soil contamination in urban areas and the potential for conflicts with other land uses present ongoing challenges.",
-  "Despite these limitations, cities around the world are increasingly incorporating urban agriculture into their planning strategies. Singapore, for instance, aims to produce 30% of its nutritional needs domestically by 2030, with urban farms playing a central role in this ambition. Similarly, Detroit has transformed thousands of vacant lots into productive gardens, creating both food and employment opportunities for local residents.",
-  "The economic viability of urban farming varies significantly depending on the model employed. Community gardens, which rely largely on volunteer labor, operate at minimal cost but produce modest yields. In contrast, high-tech vertical farms using hydroponics and artificial lighting can achieve impressive productivity but require substantial capital investment.",
-];
-
-const tfngQuestions = [
-  "Urban farming has become more popular in recent years.",
-  "Traditional agriculture uses the same spaces as urban farming.",
-  "Urban farming eliminates all carbon emissions from food production.",
-  "Singapore aims to produce 30% of its food locally by 2030.",
-  "Detroit's urban farming program has been unsuccessful.",
-];
-
-const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => void }) => {
-  const [timeLeft, setTimeLeft] = useState(20 * 60); // 20 min
-  const [answers, setAnswers] = useState<Record<number, string | null>>({});
+const ReadingPlayer = ({ 
+  passage, 
+  onClose, 
+  savedProgress,
+  onSave,
+  onSubmit 
+}: { 
+  passage: Passage; 
+  onClose: () => void;
+  savedProgress?: any;
+  onSave: (answers: Record<number, string>, highlights: string[], timeSpent: number) => void;
+  onSubmit: (answers: Record<number, string>, timeSpent: number) => void;
+}) => {
+  const [timeLeft, setTimeLeft] = useState(passage.duration_min * 60);
+  const [answers, setAnswers] = useState<Record<number, string>>(savedProgress?.answers || {});
   const [highlightMode, setHighlightMode] = useState(false);
-  const [highlights, setHighlights] = useState<string[]>([]);
-  const totalQ = tfngQuestions.length;
+  const [highlights, setHighlights] = useState<string[]>(savedProgress?.highlights || []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const questions = passage.questions || [];
+  const totalQ = questions.length;
   const answered = Object.keys(answers).length;
   const isLowTime = timeLeft < 5 * 60;
 
   useEffect(() => {
-    const iv = setInterval(() => setTimeLeft((t) => Math.max(0, t - 1)), 1000);
+    // Load saved progress
+    if (savedProgress?.time_spent_seconds) {
+      const savedTime = Math.max(0, passage.duration_min * 60 - savedProgress.time_spent_seconds);
+      setTimeLeft(savedTime);
+    }
+  }, [savedProgress, passage.duration_min]);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setTimeLeft((t) => {
+        const newTime = Math.max(0, t - 1);
+        // Auto-save every 30 seconds
+        if (newTime % 30 === 0 && newTime > 0) {
+          const timeSpent = passage.duration_min * 60 - newTime;
+          onSave(answers, highlights, timeSpent);
+        }
+        return newTime;
+      });
+    }, 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [answers, highlights, passage.duration_min, onSave]);
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -96,9 +91,19 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
   const toggleAnswer = (qIndex: number, value: string) => {
     setAnswers((prev) => ({
       ...prev,
-      [qIndex]: prev[qIndex] === value ? null : value,
+      [qIndex]: prev[qIndex] === value ? '' : value,
     }));
   };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    const timeSpent = passage.duration_min * 60 - timeLeft;
+    await onSubmit(answers, timeSpent);
+    setIsSubmitting(false);
+  };
+
+  // Parse passage content into paragraphs
+  const paragraphs = passage.content.split('\n\n').filter(p => p.trim());
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -109,7 +114,7 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground truncate">{passage.title}</p>
-          <p className="text-xs text-muted-foreground">{passage.topicTag}</p>
+          <p className="text-xs text-muted-foreground">{passage.topic_tag}</p>
         </div>
 
         {/* Question progress dots */}
@@ -118,7 +123,7 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
             <div
               key={i}
               className={`w-2 h-2 rounded-full transition-colors ${
-                answers[i] != null ? "bg-success" : "bg-border"
+                answers[i] ? "bg-success" : "bg-border"
               }`}
             />
           ))}
@@ -147,17 +152,6 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
         <span className="text-xs text-muted-foreground ml-auto">
           {answered}/{totalQ} answered
         </span>
-        {/* Mobile question dots */}
-        <div className="flex sm:hidden items-center gap-1">
-          {Array.from({ length: totalQ }).map((_, i) => (
-            <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                answers[i] != null ? "bg-success" : "bg-border"
-              }`}
-            />
-          ))}
-        </div>
       </div>
 
       {/* Split content */}
@@ -169,7 +163,7 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
         >
           <h2 className="text-lg font-bold text-foreground mb-4">{passage.title}</h2>
           <div className="text-sm text-foreground leading-relaxed space-y-3">
-            {passageText.map((para, i) => (
+            {paragraphs.map((para, i) => (
               <p key={i}>
                 {highlights.some((h) => para.includes(h))
                   ? para.split(new RegExp(`(${highlights.filter((h) => para.includes(h)).map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("|")})`, "gi")).map((part, j) =>
@@ -211,15 +205,15 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
             <span className="font-semibold text-foreground">NOT GIVEN</span>.
           </p>
           <div className="space-y-5">
-            {tfngQuestions.map((q, i) => (
+            {questions.map((q, i) => (
               <div key={i} className="space-y-2">
                 <p className="text-sm text-foreground leading-relaxed">
                   <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold mr-2 ${
-                    answers[i] != null ? "bg-success text-success-foreground" : "bg-secondary text-muted-foreground"
+                    answers[i] ? "bg-success text-success-foreground" : "bg-secondary text-muted-foreground"
                   }`}>
                     {i + 1}
                   </span>
-                  {q}
+                  {q.question}
                 </p>
                 <div className="flex gap-2 pl-8">
                   {["True", "False", "Not Given"].map((opt) => (
@@ -247,8 +241,19 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
         <div className="flex-1 text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">{answered}</span>/{totalQ} answered
         </div>
-        <Button className="h-12 px-8 text-sm" disabled={answered < totalQ}>
-          Submit Answers
+        <Button 
+          className="h-12 px-8 text-sm" 
+          disabled={answered < totalQ || isSubmitting}
+          onClick={handleSubmit}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            "Submit Answers"
+          )}
         </Button>
       </div>
     </div>
@@ -258,19 +263,105 @@ const ReadingPlayer = ({ passage, onClose }: { passage: Passage; onClose: () => 
 /* ─── Main ─── */
 const ReadingPractice = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const { passages, loading: passagesLoading, refetch: refetchPassages } = usePassages();
+  const { progress, loading: progressLoading, getPassageStatus, startPassage, submitAnswers } = useUserReadingProgress();
+  const { stats } = useReadingStats();
   const [activeType, setActiveType] = useState("all");
   const [activePassage, setActivePassage] = useState<Passage | null>(null);
+  const [generatingPassage, setGeneratingPassage] = useState(false);
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+  const loading = passagesLoading || progressLoading;
 
-  const filtered = activeType === "all" || activeType === "" ? passages : passages.filter((p) => p.type === activeType);
+  const filtered = activeType === "all" || activeType === "" 
+    ? passages 
+    : passages.filter((p) => p.type === activeType);
+
+  const handleStartPassage = async (passage: Passage) => {
+    await startPassage(passage.id);
+    setActivePassage(passage);
+  };
+
+  const handleSaveProgress = async (answers: Record<number, string>, highlights: string[], timeSpent: number) => {
+    if (activePassage) {
+      // Save progress via hook
+      const { saveProgress } = useUserReadingProgress();
+      await saveProgress(activePassage.id, answers, highlights, timeSpent);
+    }
+  };
+
+  const handleSubmit = async (answers: Record<number, string>, timeSpent: number) => {
+    if (!activePassage) return;
+    
+    // Build correct answers map
+    const correctAnswers: Record<number, string> = {};
+    activePassage.questions.forEach((q, i) => {
+      if (q.answer) correctAnswers[i] = q.answer;
+    });
+    
+    await submitAnswers(activePassage.id, answers, correctAnswers, timeSpent);
+    setActivePassage(null);
+    // Refresh data
+    window.location.reload();
+  };
+
+  const generateNewPassage = async (type: string, difficulty: string) => {
+    setGeneratingPassage(true);
+    try {
+      const topicMap: Record<string, string> = {
+        'heading': 'science discovery',
+        'tfng': 'environment',
+        'summary': 'technology',
+        'mcq': 'education',
+        'short': 'health',
+        'diagram': 'urban development'
+      };
+      
+      const passage = await groqService.generateReadingPassage({
+        topic: topicMap[type] || 'general',
+        difficulty: difficulty as 'easy' | 'medium' | 'hard',
+        wordCount: difficulty === 'easy' ? 200 : difficulty === 'medium' ? 300 : 400,
+        questionType: type as any
+      });
+
+      // Save to database
+      const { data, error } = await supabase
+        .from('reading_passages')
+        .insert({
+          title: passage.title,
+          content: passage.content,
+          type: type,
+          difficulty: difficulty,
+          topic_tag: topicMap[type] || 'General',
+          word_count: passage.wordCount,
+          questions: passage.questions,
+          ai_generated: true,
+          ai_model: 'llama-3.3-70b'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      await refetchPassages();
+      setActiveType('all');
+    } catch (err) {
+      console.error('Failed to generate passage:', err);
+    } finally {
+      setGeneratingPassage(false);
+    }
+  };
 
   if (activePassage) {
-    return <ReadingPlayer passage={activePassage} onClose={() => setActivePassage(null)} />;
+    const savedProgress = getPassageStatus(activePassage.id);
+    return (
+      <ReadingPlayer 
+        passage={activePassage} 
+        onClose={() => setActivePassage(null)}
+        savedProgress={savedProgress}
+        onSave={handleSaveProgress}
+        onSubmit={handleSubmit}
+      />
+    );
   }
 
   return (
@@ -282,7 +373,9 @@ const ReadingPractice = () => {
         </button>
         <div>
           <h1 className="text-2xl font-bold leading-8 text-foreground">Reading Practice</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">56 passages • 8 completed</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {passages.length} passages • {stats?.tests_completed || 0} completed
+          </p>
         </div>
       </div>
 
@@ -293,7 +386,10 @@ const ReadingPractice = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground">Focus: True/False/Not Given</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Accuracy dropped 15% — practice paraphrases</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {stats?.avg_band ? `Your avg: Band ${stats.avg_band} — ` : ''}
+            Practice paraphrases for higher scores
+          </p>
         </div>
         <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setActiveType("tfng")}>
           Practice
@@ -302,7 +398,23 @@ const ReadingPractice = () => {
 
       {/* Question Type Browser */}
       <div>
-        <h2 className="text-sm font-semibold text-foreground mb-3">By Question Type</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">By Question Type</h2>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-8 text-xs"
+            onClick={() => generateNewPassage(activeType === 'all' ? 'tfng' : activeType, 'medium')}
+            disabled={generatingPassage}
+          >
+            {generatingPassage ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3 mr-1" />
+            )}
+            Generate New
+          </Button>
+        </div>
         <QuestionTypeBrowser
           types={questionTypes}
           activeType={activeType}
@@ -315,7 +427,7 @@ const ReadingPractice = () => {
       {/* Next Recommendation */}
       <NextRecommendation
         title="True/False/Not Given Practice"
-        subtitle="Accuracy dropped 15% — focus on paraphrasing."
+        subtitle="Your weakest area. Focus on paraphrasing skills."
         route="/practice/reading"
         themeColor="success"
       />
@@ -343,25 +455,29 @@ const ReadingPractice = () => {
                 </div>
               ))
             : filtered.map((passage) => {
+                const savedProgress = getPassageStatus(passage.id);
+                const status = savedProgress?.status || 'new';
+                const progress = savedProgress?.score || 0;
                 const diff = difficultyConfig[passage.difficulty];
+                
                 return (
                   <button
                     key={passage.id}
-                    onClick={() => setActivePassage(passage)}
+                    onClick={() => handleStartPassage(passage)}
                     className="w-full bg-card rounded-xl border border-border p-4 text-left hover:shadow-elevated transition-all duration-200 press focus-ring group"
                   >
                     <div className="flex items-start gap-3">
                       <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                        passage.status === "completed"
+                        status === "completed"
                           ? "bg-success/10"
-                          : passage.status === "in-progress"
+                          : status === "in-progress"
                           ? "bg-success/10"
                           : "bg-secondary group-hover:bg-success/10"
                       }`}>
-                        {passage.status === "completed" ? (
+                        {status === "completed" ? (
                           <CheckCircle2 className="w-5 h-5 text-success" />
                         ) : (
-                          <BookOpen className={`w-5 h-5 ${passage.status === "in-progress" ? "text-success" : "text-muted-foreground group-hover:text-success"} transition-colors`} />
+                          <BookOpen className={`w-5 h-5 ${status === "in-progress" ? "text-success" : "text-muted-foreground group-hover:text-success"} transition-colors`} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -372,28 +488,37 @@ const ReadingPractice = () => {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground">{passage.topicTag}</span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> {passage.duration}</span>
-                          <span className="text-xs text-muted-foreground">{passage.questions}Q</span>
+                          <span className="text-xs text-muted-foreground">{passage.topic_tag}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> {passage.duration_min} min</span>
+                          <span className="text-xs text-muted-foreground">{(passage.questions || []).length}Q</span>
+                          {passage.ai_generated && (
+                            <span className="text-[10px] bg-primary/10 text-primary px-1.5 rounded">AI</span>
+                          )}
                         </div>
-                        {passage.progress > 0 && (
+                        {status === 'in-progress' && progress > 0 && (
                           <div className="mt-2 space-y-1">
-                            <Progress value={passage.progress} className="h-1.5" />
-                            <p className="text-[11px] text-muted-foreground">{passage.progress}%</p>
+                            <Progress value={progress} className="h-1.5" />
+                            <p className="text-[11px] text-muted-foreground">{progress}% complete</p>
+                          </div>
+                        )}
+                        {status === 'completed' && savedProgress?.band_score && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-success">
+                              Band {savedProgress.band_score}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              ({savedProgress.score}%)
+                            </span>
                           </div>
                         )}
                         <div className="mt-2.5 flex items-center gap-2">
-                          {passage.status === "in-progress" ? (
+                          {status === "in-progress" ? (
                             <>
                               <span className="text-xs font-semibold text-success flex items-center gap-1"><Play className="w-3 h-3" /> Continue</span>
-                              <span className="text-border">|</span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Restart</span>
                             </>
-                          ) : passage.status === "completed" ? (
+                          ) : status === "completed" ? (
                             <>
                               <span className="text-xs font-semibold text-success flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Done</span>
-                              <span className="text-border">|</span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Retake</span>
                             </>
                           ) : (
                             <span className="text-xs font-semibold text-success flex items-center gap-1 group-hover:underline underline-offset-2">

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Supabase Connection Test</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+    .result { padding: 15px; margin: 10px 0; border-radius: 8px; }
+    .success { background: #dcfce7; color: #166534; }
+    .error { background: #fee2e2; color: #991b1b; }
+    .loading { background: #f3f4f6; }
+    input { width: 100%; padding: 10px; margin: 5px 0; font-family: monospace; }
+    button { padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Supabase Connection Test</h1>
+  <p>This tool helps diagnose connection issues.</p>
+  
+  <div>
+    <label>Supabase URL:</label>
+    <input type="text" id="url" placeholder="https://abcdefghijklmnop.supabase.co" />
+    
+    <label>Anon Key (optional):</label>
+    <input type="text" id="key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+    
+    <button onclick="testConnection()">Test Connection</button>
+  </div>
+  
+  <div id="results"></div>
+
+  <script>
+    async function testConnection() {
+      const url = document.getElementById('url').value.trim();
+      const key = document.getElementById('key').value.trim();
+      const results = document.getElementById('results');
+      
+      if (!url) {
+        results.innerHTML = '<div class="result error">❌ Please enter a URL</div>';
+        return;
+      }
+      
+      results.innerHTML = '<div class="result loading">⏳ Testing connection...</div>';
+      
+      try {
+        // Test 1: Basic fetch to Supabase REST endpoint
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(`${url}/rest/v1/`, {
+          method: 'GET',
+          headers: key ? { 'apikey': key } : {},
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.status === 401) {
+          results.innerHTML = `
+            <div class="result success">
+              <strong>✅ Connection Working!</strong><br>
+              Status: 401 Unauthorized (expected without auth)<br>
+              This means Supabase is reachable. Your issue is likely the API key or CORS.
+            </div>
+          `;
+        } else if (response.ok || response.status === 404) {
+          results.innerHTML = `
+            <div class="result success">
+              <strong>✅ Connection Working!</strong><br>
+              Status: ${response.status}<br>
+              Supabase is reachable and responding.
+            </div>
+          `;
+        } else {
+          results.innerHTML = `
+            <div class="result error">
+              <strong>⚠️ Unexpected Response</strong><br>
+              Status: ${response.status}<br>
+              Check your Supabase dashboard for issues.
+            </div>
+          `;
+        }
+      } catch (error) {
+        let errorMsg = error.message;
+        let suggestion = '';
+        
+        if (error.name === 'AbortError') {
+          errorMsg = 'Connection timed out after 10 seconds';
+          suggestion = 'Your project might be paused or the URL is wrong.';
+        } else if (error.message.includes('Failed to fetch')) {
+          suggestion = 'This usually means:\n1. Project is paused\n2. Wrong URL\n3. Network blocking\n4. Project deleted';
+        }
+        
+        results.innerHTML = `
+          <div class="result error">
+            <strong>❌ Connection Failed</strong><br>
+            Error: ${errorMsg}<br>
+            <pre style="background: #fee2e2; padding: 10px; margin-top: 10px; white-space: pre-wrap;">${suggestion}</pre>
+          </div>
+        `;
+      }
+    }
+    
+    // Auto-fill from URL params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('url')) {
+      document.getElementById('url').value = params.get('url');
+    }
+  </script>
+</body>
+</html>

@@ -5,10 +5,12 @@ import {
   BarChart3, FileText, MessageSquare, ChevronRight, CheckCircle2,
   Image, TrendingUp, Timer, Target, Copy, Columns2, Lightbulb,
   PieChart, Table, RefreshCw, Map, Mail, Heart, Eye,
-  Scale, CircleDot, HelpCircle, GripVertical, BookOpen, Quote
+  Scale, CircleDot, HelpCircle, GripVertical, BookOpen, Quote, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useWritingEvaluation } from "@/hooks/useWritingEvaluation";
+import type { WritingFeedback } from "@/services/writing";
 
 /* ─── Question Type Categories ─── */
 const task1Types = [
@@ -321,21 +323,22 @@ const sampleDifferences = upgradeSteps;
 const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => void }) => {
   const [essay, setEssay] = useState(sampleEssay);
   const [scored, setScored] = useState(false);
-  const [scoring, setScoring] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [rewriting, setRewriting] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [filter, setFilter] = useState<"all" | "error" | "suggestion" | "good">("all");
-  const [scoringStep, setScoringStep] = useState("");
   const [timeLeft, setTimeLeft] = useState(topic.type === "task1" ? 20 * 60 : 40 * 60);
   const [copied, setCopied] = useState(false);
   const [selectedBand, setSelectedBand] = useState("7.0");
   const [copiedPhrase, setCopiedPhrase] = useState<string | null>(null);
+  
+  // AI Evaluation hook
+  const { submitEssay, loading: scoring, error: scoringError, currentFeedback } = useWritingEvaluation();
 
   const wordCount = essay.trim().split(/\s+/).filter(Boolean).length;
   const minWords = topic.type === "task1" ? 150 : 250;
-  const overallBand = scored ? (bandScores.reduce((a, b) => a + b.score, 0) / bandScores.length).toFixed(1) : null;
+  const overallBand = currentFeedback ? currentFeedback.overallBand.toFixed(1) : null;
   const isLowTime = timeLeft < 5 * 60;
 
   useEffect(() => {
@@ -345,13 +348,13 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-  const handleScore = () => {
-    setScoring(true);
-    setScoringStep("Analyzing essay structure...");
-    setTimeout(() => setScoringStep("Checking grammar & vocabulary..."), 800);
-    setTimeout(() => setScoringStep("Evaluating coherence..."), 1600);
-    setTimeout(() => setScoringStep("Calculating band score..."), 2400);
-    setTimeout(() => { setScoring(false); setScoringStep(""); setScored(true); }, 3200);
+  const handleScore = async () => {
+    if (wordCount < minWords) return;
+    
+    const feedback = await submitEssay(essay, topic.id, topic.type, topic.prompt);
+    if (feedback) {
+      setScored(true);
+    }
   };
 
   const handleRewrite = () => {
@@ -446,10 +449,21 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
 
           {/* Actions */}
           <div className="flex flex-wrap gap-3">
+            {scoringError && (
+              <div className="w-full bg-destructive/10 text-destructive rounded-lg p-3 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {scoringError}
+              </div>
+            )}
             {!scored ? (
-              <Button size="lg" onClick={handleScore} disabled={scoring} className="flex-1 sm:flex-none min-h-[48px]">
+              <Button 
+                size="lg" 
+                onClick={handleScore} 
+                disabled={scoring || wordCount < minWords} 
+                className="flex-1 sm:flex-none min-h-[48px]"
+              >
                 {scoring ? (
-                  <><span className="animate-spin mr-2">⏳</span> {scoringStep}</>
+                  <><span className="animate-spin mr-2">⏳</span> Analyzing...</>
                 ) : (
                   <><Sparkles className="w-4 h-4 mr-1" /> Submit for AI Check</>
                 )}
@@ -470,7 +484,7 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
           </div>
 
           {/* AI Rewrite */}
-          {showRewrite && !compareMode && (
+          {showRewrite && !compareMode && currentFeedback && (
             <div className="bg-card rounded-xl border border-border overflow-hidden">
               <div className="px-4 py-3 border-b border-border bg-accent/5 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-accent" />
@@ -478,7 +492,7 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
                 <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full ml-auto">Est. Band 7.5</span>
               </div>
               <div className="p-5 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                {sampleAnswer}
+                {currentFeedback.improvedVersion}
               </div>
               <div className="px-4 pb-4 flex gap-2">
                 <Button variant="outline" size="sm" onClick={handleCopy}>
@@ -509,19 +523,21 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
 
                 {/* Breakdown */}
                 <div className="space-y-3">
-                  {bandScores.map((s) => (
+                  {currentFeedback && [
+                    { label: "Task Response", score: currentFeedback.taskResponse },
+                    { label: "Coherence & Cohesion", score: currentFeedback.coherence },
+                    { label: "Lexical Resource", score: currentFeedback.lexicalResource },
+                    { label: "Grammar Range", score: currentFeedback.grammar },
+                  ].map((s) => (
                     <div key={s.label}>
                       <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="font-medium text-foreground flex items-center gap-1.5">
-                          {s.label}
-                          <span className="text-xs">{s.icon}</span>
-                        </span>
-                        <span className={`font-bold ${s.score >= 7 ? "text-success" : s.score >= 6.5 ? "text-warning" : "text-destructive"}`}>{s.score}</span>
+                        <span className="font-medium text-foreground">{s.label}</span>
+                        <span className={`font-bold ${s.score >= 7 ? "text-success" : s.score >= 6 ? "text-warning" : "text-destructive"}`}>{s.score.toFixed(1)}</span>
                       </div>
                       <div className="h-2 bg-secondary rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all duration-700" style={{
-                          width: `${(s.score / s.max) * 100}%`,
-                          backgroundColor: s.score >= 7 ? "hsl(var(--success))" : s.score >= 6.5 ? "hsl(var(--warning))" : "hsl(var(--destructive))",
+                          width: `${(s.score / 9) * 100}%`,
+                          backgroundColor: s.score >= 7 ? "hsl(var(--success))" : s.score >= 6 ? "hsl(var(--warning))" : "hsl(var(--destructive))",
                         }} />
                       </div>
                     </div>
@@ -695,49 +711,34 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
                 </div>
               )}
 
-              {/* Corrections */}
-              <div className="border-t border-border">
-                <div className="flex gap-2 p-3 overflow-x-auto no-scrollbar">
-                  {(["all", "error", "suggestion", "good"] as const).map((f) => {
-                    const count = f === "all" ? corrections.length : corrections.filter((c) => c.type === f).length;
-                    return (
-                      <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors press ${filter === f
-                            ? f === "all" ? "bg-secondary text-foreground" : `${typeConfig[f].bg} ${typeConfig[f].text}`
-                            : "bg-secondary/50 text-muted-foreground"
-                          }`}
-                      >
-                        {f === "all" ? "All" : typeConfig[f].label} ({count})
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="max-h-[300px] overflow-y-auto divide-y divide-border">
-                  {filtered.map((c, i) => {
-                    const cfg = typeConfig[c.type];
-                    return (
+              {/* AI Corrections */}
+              {currentFeedback && (
+                <div className="border-t border-border">
+                  <div className="flex gap-2 p-3 overflow-x-auto no-scrollbar">
+                    <button
+                      onClick={() => setFilter("all")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors press ${filter === "all" ? "bg-secondary text-foreground" : "bg-secondary/50 text-muted-foreground"}`}
+                    >
+                      All ({currentFeedback.corrections.length})
+                    </button>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto divide-y divide-border">
+                    {currentFeedback.corrections.slice(0, 10).map((c, i) => (
                       <div key={i} className="px-4 py-3">
                         <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                          <span className={`text-[11px] font-bold ${cfg.text}`}>{cfg.label}</span>
-                          <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground ml-auto">{c.category}</span>
+                          <span className={`w-2 h-2 rounded-full ${c.type === 'grammar' ? 'bg-destructive' : c.type === 'vocabulary' ? 'bg-warning' : 'bg-success'}`} />
+                          <span className="text-[11px] font-bold text-muted-foreground capitalize">{c.type}</span>
                         </div>
-                        {c.type !== "good" ? (
-                          <div className="space-y-0.5 mb-1.5">
-                            <p className="text-xs line-through text-destructive/70">{c.original}</p>
-                            <p className="text-xs font-medium text-success">→ {c.corrected}</p>
-                          </div>
-                        ) : (
-                          <p className="text-xs font-medium text-success mb-1.5">"{c.original}"</p>
-                        )}
+                        <div className="space-y-0.5 mb-1.5">
+                          <p className="text-xs line-through text-destructive/70">{c.original}</p>
+                          <p className="text-xs font-medium text-success">→ {c.corrected}</p>
+                        </div>
                         <p className="text-[11px] text-muted-foreground leading-relaxed">{c.explanation}</p>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Suggestions */}
               <div className="border-t border-border px-5 py-4">
@@ -746,13 +747,10 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
                   <h4 className="text-sm font-bold text-foreground">Suggestions</h4>
                 </div>
                 <div className="space-y-2">
-                  {suggestions.map((s, i) => (
+                  {currentFeedback?.suggestions.map((s, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs">
                       <span className="text-muted-foreground mt-0.5">•</span>
-                      <div>
-                        <p className="text-foreground">{s.text}</p>
-                        <p className="text-[10px] text-muted-foreground">{s.category}</p>
-                      </div>
+                      <p className="text-foreground">{s}</p>
                     </div>
                   ))}
                 </div>

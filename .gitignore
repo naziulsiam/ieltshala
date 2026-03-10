@@ -8,6 +8,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.example
 
 # Editor / IDE
 .vscode/
@@ -27,3 +28,6 @@ npm-debug.log*
 # Lock files (keep package-lock.json, ignore bun locks)
 bun.lock
 bun.lockb
+
+#md files
+*.md

@@ -1,97 +1,35 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Clock, Lock, Trophy, Star, ChevronRight, Timer, ArrowLeft, CheckCircle, XCircle, RotateCcw } from "lucide-react";
+import { Clock, Lock, Trophy, Star, ChevronRight, Timer, ArrowLeft, CheckCircle, XCircle, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface MockDef {
-  id: string;
-  title: string;
-  skill: string;
-  time: string;
-  durationMin: number;
-  questions: { q: string; options: string[]; correct: number }[];
-}
-
-const shortMocks: MockDef[] = [
-  {
-    id: "listening-mini", title: "Listening Mini Mock", skill: "Listening", time: "30 min", durationMin: 30,
-    questions: [
-      { q: "The lecture is mainly about ___.", options: ["marine ecosystems", "climate change impacts on coral reefs", "ocean conservation policies", "history of marine biology"], correct: 1 },
-      { q: "According to the speaker, the biggest threat to coral reefs is ___.", options: ["overfishing", "water pollution", "rising ocean temperatures", "coastal development"], correct: 2 },
-      { q: "What percentage of marine species depend on coral reefs?", options: ["10%", "25%", "50%", "75%"], correct: 1 },
-      { q: "The speaker mentions that coral bleaching occurs when ___.", options: ["water temperature drops", "algae leave the coral", "fish populations decline", "currents change direction"], correct: 1 },
-      { q: "Which solution does the speaker consider most effective?", options: ["Marine protected areas", "Reducing carbon emissions", "Artificial reef construction", "Public awareness campaigns"], correct: 1 },
-    ],
-  },
-  {
-    id: "reading-mini", title: "Reading Mini Mock", skill: "Reading", time: "45 min", durationMin: 45,
-    questions: [
-      { q: "The passage states that urban farming originated in ___.", options: ["North America", "Ancient Mesopotamia", "Modern Japan", "Colonial Europe"], correct: 1 },
-      { q: "According to the text, vertical farming uses ___ less water than traditional farming.", options: ["50%", "70%", "90%", "95%"], correct: 2 },
-      { q: "The main benefit of hydroponics is ___.", options: ["Lower cost", "No soil requirement", "Faster growth only", "Better taste"], correct: 1 },
-      { q: "Which statement is TRUE according to the passage?", options: ["Urban farms can only grow vegetables", "Technology has no role in modern farming", "Rooftop gardens reduce building energy costs", "Urban farming is declining globally"], correct: 2 },
-      { q: "The author's tone toward urban farming is best described as ___.", options: ["Critical", "Cautiously optimistic", "Indifferent", "Overwhelmingly negative"], correct: 1 },
-    ],
-  },
-  {
-    id: "writing-mini", title: "Writing Task 2 Mock", skill: "Writing", time: "40 min", durationMin: 40,
-    questions: [
-      { q: "A strong Task 2 introduction should include ___.", options: ["A personal anecdote", "A paraphrase of the question and thesis statement", "A list of all arguments", "The conclusion"], correct: 1 },
-      { q: "Which cohesive device connects contrasting ideas?", options: ["Furthermore", "However", "In addition", "Moreover"], correct: 1 },
-      { q: "The recommended minimum word count for Task 2 is ___.", options: ["200 words", "250 words", "300 words", "350 words"], correct: 1 },
-      { q: "For a Band 7+ essay, paragraphs should ___.", options: ["Be very short (2 sentences)", "Each develop one clear main idea", "Include many quotations", "Avoid any examples"], correct: 1 },
-      { q: "'Less developed countries' is an example of ___.", options: ["Informal language", "Band 5 vocabulary", "Formal academic register", "Slang"], correct: 2 },
-    ],
-  },
-];
-
-const fullMocks: MockDef[] = [
-  {
-    id: "full-1", title: "Full Academic Mock #1", skill: "All", time: "2h 45min", durationMin: 165,
-    questions: [
-      { q: "Section 1: What time does the library close on weekdays?", options: ["5:00 PM", "7:30 PM", "9:00 PM", "10:00 PM"], correct: 2 },
-      { q: "Section 2: The speaker recommends starting revision ___ weeks before exams.", options: ["2", "4", "6", "8"], correct: 2 },
-      { q: "Section 3: Which research method is described as most reliable?", options: ["Surveys", "Interviews", "Controlled experiments", "Case studies"], correct: 2 },
-      { q: "Reading: The passage suggests that AI will most impact ___.", options: ["Agriculture", "Healthcare", "Transportation", "Education"], correct: 1 },
-      { q: "Reading: According to the text, 'paradigm shift' refers to ___.", options: ["A small change", "A fundamental change in approach", "A political revolution", "A scientific error"], correct: 1 },
-      { q: "Reading: The author implies that critics of technology are ___.", options: ["Completely wrong", "Raising valid concerns", "Uninformed", "Financially motivated"], correct: 1 },
-      { q: "Writing knowledge: An opinion essay should ___.", options: ["Only present one side", "Present both sides then give opinion", "Avoid personal opinions entirely", "Only use statistics"], correct: 1 },
-      { q: "Speaking knowledge: Fluency is demonstrated by ___.", options: ["Speaking very fast", "Speaking without long pauses", "Using complex grammar", "Memorizing answers"], correct: 1 },
-    ],
-  },
-];
+import { useMockTests, useMockTestResults, type MockTest, type MockQuestion } from "@/hooks/useMockTests";
+import { useProfile } from "@/hooks/useProfile";
 
 const lockedFullMocks = [
   { title: "Full Academic Mock #2", time: "2h 45min" },
   { title: "Full General Training Mock", time: "2h 45min" },
 ];
 
-interface HistoryEntry {
-  id: string;
-  title: string;
-  date: string;
-  overall: string;
-  l: string; r: string; w: string; s: string;
-  answers: number[];
-  mockId: string;
-}
-
-const defaultHistory: HistoryEntry[] = [
-  { id: "h1", title: "Listening Mini Mock", date: "Mar 5, 2026", overall: "7.0", l: "7.0", r: "-", w: "-", s: "-", answers: [1, 2, 1, 1, 0], mockId: "listening-mini" },
-  { id: "h2", title: "Full Academic Mock #1", date: "Mar 1, 2026", overall: "6.5", l: "7.0", r: "6.5", w: "6.0", s: "6.5", answers: [2, 2, 2, 1, 1, 1, 0, 1], mockId: "full-1" },
-];
-
 type View = "home" | "test" | "results" | "review";
 
 const MockTests = () => {
+  const navigate = useNavigate();
+  const { tests, loading: testsLoading } = useMockTests();
+  const { results, loading: resultsLoading, submitResult } = useMockTestResults();
+  const { profile } = useProfile();
+  
   const [view, setView] = useState<View>("home");
-  const [activeMock, setActiveMock] = useState<MockDef | null>(null);
+  const [activeMock, setActiveMock] = useState<MockTest | null>(null);
   const [qi, setQi] = useState(0);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [timer, setTimer] = useState(0);
   const [score, setScore] = useState(0);
-  const [history] = useState<HistoryEntry[]>(defaultHistory);
-  const [reviewEntry, setReviewEntry] = useState<HistoryEntry | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewEntry, setReviewEntry] = useState<any>(null);
+
+  // Separate tests by type
+  const shortMocks = tests.filter(t => t.type !== 'full-academic');
+  const fullMocks = tests.filter(t => t.type === 'full-academic');
 
   // Timer countdown
   useEffect(() => {
@@ -106,11 +44,11 @@ const MockTests = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, activeMock]);
 
-  const startMock = useCallback((mock: MockDef) => {
+  const startMock = useCallback((mock: MockTest) => {
     setActiveMock(mock);
     setQi(0);
     setAnswers(new Array(mock.questions.length).fill(null));
-    setTimer(mock.durationMin * 60);
+    setTimer(mock.duration_min * 60);
     setScore(0);
     setView("test");
   }, []);
@@ -123,21 +61,27 @@ const MockTests = () => {
     });
   };
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!activeMock) return;
-    const correct = activeMock.questions.reduce(
-      (acc, q, i) => acc + (answers[i] === q.correct ? 1 : 0), 0
+    setSubmitting(true);
+    
+    const timeSpent = activeMock.duration_min * 60 - timer;
+    const result = await submitResult(
+      activeMock.id,
+      answers.map(a => a ?? -1),
+      activeMock.questions,
+      timeSpent
     );
-    const pct = correct / activeMock.questions.length;
-    // Convert to band: 90%+=8.5, 80%+=7.5, 70%+=7.0, 60%+=6.5, 50%+=6.0, below=5.5
-    const bandMap = [[0.9, 8.5], [0.8, 7.5], [0.7, 7.0], [0.6, 6.5], [0.5, 6.0], [0, 5.5]] as const;
-    const band = bandMap.find(([threshold]) => pct >= threshold)?.[1] ?? 5.5;
-    setScore(band);
+    
+    if (result) {
+      setScore(result.overall_band || 0);
+    }
+    setSubmitting(false);
     setView("results");
-  }, [activeMock, answers]);
+  }, [activeMock, answers, timer, submitResult]);
 
-  const openReview = (entry: HistoryEntry) => {
-    const mock = [...shortMocks, ...fullMocks].find(m => m.id === entry.mockId);
+  const openReview = (entry: any) => {
+    const mock = tests.find(m => m.id === entry.mock_test_id);
     if (mock) {
       setActiveMock(mock);
       setAnswers(entry.answers);
@@ -152,10 +96,12 @@ const MockTests = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const loading = testsLoading || resultsLoading;
+
   // ─── TEST PLAYER ───
   if (view === "test" && activeMock) {
     const q = activeMock.questions[qi];
-    const timerPct = (timer / (activeMock.durationMin * 60)) * 100;
+    const timerPct = (timer / (activeMock.duration_min * 60)) * 100;
     const answered = answers.filter(a => a !== null).length;
 
     return (
@@ -204,7 +150,7 @@ const MockTests = () => {
               <button
                 key={i}
                 onClick={() => selectAnswer(i)}
-                className={`w-full p-3.5 rounded-xl text-left text-sm font-medium transition-all press border ${answers[qi] === i
+                className={`w-full p-3.5 rounded-xl text-left text-sm font-medium transition-all duration-150 press border ${answers[qi] === i
                     ? "bg-primary/10 text-primary border-primary ring-2 ring-primary/20"
                     : "bg-card border-border hover:border-primary/30 hover:bg-secondary/30"
                   }`}
@@ -234,9 +180,17 @@ const MockTests = () => {
             <Button
               variant="coral"
               onClick={handleSubmit}
+              disabled={submitting}
               className="press"
             >
-              Submit Test
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Test"
+              )}
             </Button>
           )}
         </div>
@@ -245,11 +199,10 @@ const MockTests = () => {
   }
 
   // ─── RESULTS ───
-  if (view === "results" && activeMock) {
-    const correct = activeMock.questions.reduce(
-      (acc, q, i) => acc + (answers[i] === q.correct ? 1 : 0), 0
-    );
-    const pct = Math.round((correct / activeMock.questions.length) * 100);
+  if (view === "results" && activeMock && reviewEntry) {
+    const correct = reviewEntry.correct_count || 0;
+    const total = activeMock.questions.length;
+    const pct = reviewEntry.score_percent || 0;
 
     return (
       <div className="p-4 md:p-6 max-w-[960px] mx-auto pb-28 md:pb-8">
@@ -260,7 +213,7 @@ const MockTests = () => {
 
           <div className="w-28 h-28 rounded-full border-4 border-accent flex items-center justify-center mx-auto">
             <div>
-              <span className="text-3xl font-black text-accent">{score}</span>
+              <span className="text-3xl font-black text-accent">{reviewEntry.overall_band}</span>
               <p className="text-[10px] text-muted-foreground font-semibold">/9 Band</p>
             </div>
           </div>
@@ -271,7 +224,7 @@ const MockTests = () => {
               <p className="text-[10px] text-success/70">Correct</p>
             </div>
             <div className="bg-destructive/10 rounded-xl p-3">
-              <p className="text-xl font-bold text-destructive">{activeMock.questions.length - correct}</p>
+              <p className="text-xl font-bold text-destructive">{reviewEntry.wrong_count || 0}</p>
               <p className="text-[10px] text-destructive/70">Wrong</p>
             </div>
             <div className="bg-accent/10 rounded-xl p-3">
@@ -282,7 +235,6 @@ const MockTests = () => {
 
           <div className="flex gap-3 justify-center">
             <Button variant="outline" onClick={() => {
-              setReviewEntry(null);
               setView("review");
             }} className="press">
               <CheckCircle className="w-4 h-4 mr-1" /> Review Answers
@@ -360,123 +312,131 @@ const MockTests = () => {
         <p className="text-sm text-muted-foreground mt-1">Simulate the real IELTS exam experience.</p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        {/* Short Practice */}
-        <div className="bg-card rounded-xl p-5 shadow-card border">
-          <h2 className="text-base font-semibold mb-1">Short Practice</h2>
-          <p className="text-xs text-muted-foreground mb-4">20–45 minutes, single skill</p>
-          <div className="space-y-2">
-            {shortMocks.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => startMock(m)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors press focus-ring text-left"
-              >
-                <Trophy className="w-4 h-4 text-accent shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{m.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{m.skill} • {m.time}</p>
-                </div>
-                <span className="shrink-0 text-xs font-semibold bg-accent text-accent-foreground px-3 py-1.5 rounded-lg min-h-[32px] flex items-center">Start</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Full Mock */}
-        <div className="bg-card rounded-xl p-5 shadow-card border-2 border-primary/20">
-          <h2 className="text-base font-semibold mb-1">Full Mock Test</h2>
-          <p className="text-xs text-muted-foreground mb-4">2 hours 45 minutes, complete simulation</p>
-          <div className="space-y-2">
-            {fullMocks.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => startMock(m)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors press focus-ring text-left"
-              >
-                <Trophy className="w-4 h-4 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{m.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{m.time}</p>
-                </div>
-                <span className="shrink-0 text-xs font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg min-h-[32px] flex items-center">Start</span>
-              </button>
-            ))}
-            {lockedFullMocks.map((m) => (
-              <div key={m.title} className="w-full flex items-center gap-3 p-3 rounded-lg opacity-60 text-left">
-                <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{m.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{m.time}</p>
-                </div>
-                <span className="text-[10px] font-semibold bg-accent/10 text-accent px-2 py-0.5 rounded-full">Premium</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Test History */}
-      <div className="bg-card rounded-xl shadow-card overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-base font-semibold">Test History</h2>
-          <span className="text-xs text-muted-foreground">{history.length} tests taken</span>
-        </div>
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-secondary/30">
-                <th className="text-left px-5 py-2.5 font-medium text-muted-foreground text-xs">Test</th>
-                <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs">Date</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">Overall</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">L</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">R</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">W</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">S</th>
-                <th className="text-right px-5 py-2.5 font-medium text-muted-foreground text-xs">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {history.map((h) => (
-                <tr key={h.id} className="hover:bg-secondary/30 transition-colors">
-                  <td className="px-5 py-3 font-medium">{h.title}</td>
-                  <td className="px-3 py-3 text-muted-foreground text-xs">{h.date}</td>
-                  <td className="px-3 py-3 text-center font-bold text-accent">{h.overall}</td>
-                  <td className="px-3 py-3 text-center text-xs">{h.l}</td>
-                  <td className="px-3 py-3 text-center text-xs">{h.r}</td>
-                  <td className="px-3 py-3 text-center text-xs">{h.w}</td>
-                  <td className="px-3 py-3 text-center text-xs">{h.s}</td>
-                  <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => openReview(h)}
-                      className="text-xs font-semibold text-primary hover:underline press"
-                    >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="sm:hidden divide-y">
-          {history.map((h) => (
-            <button
-              key={h.id}
-              onClick={() => openReview(h)}
-              className="w-full flex items-center gap-3 p-4 hover:bg-secondary/30 transition-colors press text-left"
-            >
-              <Star className="w-4 h-4 text-accent shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{h.title}</p>
-                <p className="text-[11px] text-muted-foreground">{h.date}</p>
-              </div>
-              <span className="text-lg font-bold text-accent">{h.overall}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-card rounded-xl h-32 animate-pulse" />
           ))}
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {/* Short Practice */}
+            <div className="bg-card rounded-xl p-5 shadow-card border">
+              <h2 className="text-base font-semibold mb-1">Short Practice</h2>
+              <p className="text-xs text-muted-foreground mb-4">20–45 minutes, single skill</p>
+              <div className="space-y-2">
+                {shortMocks.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => startMock(m)}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors press focus-ring text-left"
+                  >
+                    <Trophy className="w-4 h-4 text-accent shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{m.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{m.skill} • {m.duration_min} min</p>
+                    </div>
+                    <span className="shrink-0 text-xs font-semibold bg-accent text-accent-foreground px-3 py-1.5 rounded-lg min-h-[32px] flex items-center">Start</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Full Mock */}
+            <div className="bg-card rounded-xl p-5 shadow-card border-2 border-primary/20">
+              <h2 className="text-base font-semibold mb-1">Full Mock Test</h2>
+              <p className="text-xs text-muted-foreground mb-4">2 hours 45 minutes, complete simulation</p>
+              <div className="space-y-2">
+                {fullMocks.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => startMock(m)}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors press focus-ring text-left"
+                  >
+                    <Trophy className="w-4 h-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{m.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{m.duration_min} min</p>
+                    </div>
+                    <span className="shrink-0 text-xs font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg min-h-[32px] flex items-center">Start</span>
+                  </button>
+                ))}
+                {lockedFullMocks.map((m) => (
+                  <div key={m.title} className="w-full flex items-center gap-3 p-3 rounded-lg opacity-60 text-left">
+                    <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{m.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{m.time}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold bg-accent/10 text-accent px-2 py-0.5 rounded-full">Premium</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Test History */}
+          {results.length > 0 && (
+            <div className="bg-card rounded-xl shadow-card overflow-hidden">
+              <div className="flex items-center justify-between p-5 border-b">
+                <h2 className="text-base font-semibold">Test History</h2>
+                <span className="text-xs text-muted-foreground">{results.length} tests taken</span>
+              </div>
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-secondary/30">
+                      <th className="text-left px-5 py-2.5 font-medium text-muted-foreground text-xs">Test</th>
+                      <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs">Date</th>
+                      <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs">Overall</th>
+                      <th className="text-right px-5 py-2.5 font-medium text-muted-foreground text-xs">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {results.map((r) => (
+                      <tr key={r.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-5 py-3 font-medium">{r.mock_test?.title || 'Unknown Test'}</td>
+                        <td className="px-3 py-3 text-muted-foreground text-xs">
+                          {new Date(r.completed_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-3 text-center font-bold text-accent">{r.overall_band}</td>
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            onClick={() => openReview(r)}
+                            className="text-xs font-semibold text-primary hover:underline press"
+                          >
+                            Review
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="sm:hidden divide-y">
+                {results.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => openReview(r)}
+                    className="w-full flex items-center gap-3 p-4 hover:bg-secondary/30 transition-colors press text-left"
+                  >
+                    <Star className="w-4 h-4 text-accent shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{r.mock_test?.title || 'Unknown Test'}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(r.completed_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span className="text-lg font-bold text-accent">{r.overall_band}</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

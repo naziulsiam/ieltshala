@@ -3,13 +3,17 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Headphones, Play, Pause, Clock, CheckCircle2,
   ChevronRight, RotateCcw, FileText, Map, Users, MessageSquare,
-  Type, Sparkles, SkipBack, SkipForward, Bookmark, Volume2, X
+  Type, Sparkles, SkipBack, SkipForward, Bookmark, Volume2,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ListItemSkeleton } from "@/components/ui/skeleton-loaders";
 import QuestionTypeBrowser from "@/components/QuestionTypeBrowser";
 import NextRecommendation from "@/components/NextRecommendation";
+import { useListeningTests, useUserListeningProgress, useListeningStats, type ListeningTest } from "@/hooks/useListening";
+import { supabase } from "@/lib/supabase";
+import { generateSpeech } from "@/services/tts";
 
 /* ─── Question Types ─── */
 const questionTypes = [
@@ -20,30 +24,6 @@ const questionTypes = [
   { id: "short", icon: Type, label: "Short Answer", count: 5, avgScore: "6.5", difficulty: 3, description: "Write short answers (1-3 words) to questions about the audio.", avgTime: "~2 min", commonMistakes: ["Exceeding the word limit", "Not using the exact form heard", "Missing plural/singular distinctions"] },
 ];
 
-/* ─── Tests ─── */
-interface ListeningTest {
-  id: string;
-  title: string;
-  section: string;
-  type: string;
-  duration: string;
-  questions: number;
-  progress: number;
-  status: "new" | "in-progress" | "completed";
-  difficulty: "easy" | "medium" | "hard";
-}
-
-const tests: ListeningTest[] = [
-  { id: "1", title: "Cambridge 18 Test 1", section: "Section 1: Form Completion", type: "form", duration: "30 min", questions: 10, progress: 80, status: "in-progress", difficulty: "medium" },
-  { id: "2", title: "Cambridge 18 Test 2", section: "Section 2: Map Labeling", type: "map", duration: "30 min", questions: 10, progress: 0, status: "new", difficulty: "medium" },
-  { id: "3", title: "Cambridge 17 Test 1", section: "Section 3: Multiple Choice", type: "mcq", duration: "30 min", questions: 10, progress: 100, status: "completed", difficulty: "hard" },
-  { id: "4", title: "Cambridge 17 Test 3", section: "Section 1: Short Answer", type: "short", duration: "30 min", questions: 10, progress: 0, status: "new", difficulty: "easy" },
-  { id: "5", title: "Form Completion Drills", section: "By Type: Form Completion", type: "form", duration: "10 min", questions: 10, progress: 100, status: "completed", difficulty: "easy" },
-  { id: "6", title: "Matching Practice Set A", section: "By Type: Matching", type: "matching", duration: "12 min", questions: 8, progress: 50, status: "in-progress", difficulty: "medium" },
-  { id: "7", title: "Cambridge 16 Test 2", section: "Section 4: Short Answer", type: "short", duration: "30 min", questions: 10, progress: 0, status: "new", difficulty: "hard" },
-  { id: "8", title: "Map Labeling Set B", section: "By Type: Map / Diagram", type: "map", duration: "8 min", questions: 8, progress: 0, status: "new", difficulty: "medium" },
-];
-
 const difficultyDot: Record<string, string> = {
   easy: "bg-success",
   medium: "bg-warning",
@@ -51,19 +31,63 @@ const difficultyDot: Record<string, string> = {
 };
 
 /* ─── Player ─── */
-const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => void }) => {
+const TestPlayer = ({ 
+  test, 
+  onClose,
+  savedProgress,
+  onSubmit 
+}: { 
+  test: ListeningTest; 
+  onClose: () => void;
+  savedProgress?: any;
+  onSubmit: (answers: Record<number, string>, timeSpent: number) => void;
+}) => {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1.0);
-  const [bookmarked, setBookmarked] = useState<number[]>([]);
-  const totalTime = 1800; // 30 min in seconds
+  const [bookmarks, setBookmarks] = useState<number[]>(savedProgress?.bookmarks || []);
+  const [answers, setAnswers] = useState<Record<number, string>>(savedProgress?.answers || {});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(test.audio_url);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const totalTime = test.duration_min * 60;
 
-  // Fake playback
+  const questions = test.questions || [];
+  const totalQ = questions.length;
+  const answered = Object.keys(answers).filter(k => answers[parseInt(k)]).length;
+
+  // Generate audio if not exists
+  useEffect(() => {
+    if (!audioUrl && test.transcript) {
+      generateAudio();
+    }
+  }, [audioUrl, test.transcript]);
+
+  const generateAudio = async () => {
+    if (!test.transcript) return;
+    setGeneratingAudio(true);
+    try {
+      const script = test.transcript.substring(0, 4000); // Limit length
+      const audioUrl = await generateSpeech(script, {
+        voice: 'en-US-Neural2-D',
+        speed: speed
+      });
+      if (audioUrl) {
+        setAudioUrl(audioUrl);
+      }
+    } catch (err) {
+      console.error('Failed to generate audio:', err);
+    } finally {
+      setGeneratingAudio(false);
+    }
+  };
+
+  // Fake playback timer
   useEffect(() => {
     if (!playing) return;
     const iv = setInterval(() => setCurrentTime((t) => Math.min(t + 1, totalTime)), 1000);
     return () => clearInterval(iv);
-  }, [playing]);
+  }, [playing, totalTime]);
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   const pct = (currentTime / totalTime) * 100;
@@ -77,14 +101,24 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
 
   const speeds = [0.75, 1.0, 1.25, 1.5];
 
-  // Mock questions
-  const questions = [
-    { num: 1, text: "Complete the form below. Write NO MORE THAN TWO WORDS for each answer.", type: "header" },
-    { num: 1, text: "Name: Sarah ___________", answer: "" },
-    { num: 2, text: "Address: 42 ___________ Road", answer: "" },
-    { num: 3, text: "Phone: ___________", answer: "" },
-    { num: 4, text: "Preferred day: ___________", answer: "" },
-  ];
+  const toggleBookmark = () => {
+    setBookmarks(prev => 
+      prev.includes(currentTime) 
+        ? prev.filter(t => t !== currentTime)
+        : [...prev, currentTime]
+    );
+  };
+
+  const updateAnswer = (qNum: number, value: string) => {
+    setAnswers(prev => ({ ...prev, [qNum]: value }));
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    const timeSpent = currentTime;
+    await onSubmit(answers, timeSpent);
+    setIsSubmitting(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -98,10 +132,10 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
           <p className="text-xs text-muted-foreground">{test.section}</p>
         </div>
         <button
-          onClick={() => setBookmarked((b) => b.includes(currentTime) ? b : [...b, currentTime])}
+          onClick={toggleBookmark}
           className="p-2 rounded-lg hover:bg-secondary transition-colors"
         >
-          <Bookmark className={`w-4 h-4 ${bookmarked.length > 0 ? "text-accent fill-accent" : "text-muted-foreground"}`} />
+          <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? "text-accent fill-accent" : "text-muted-foreground"}`} />
         </button>
       </div>
 
@@ -142,9 +176,16 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
           </button>
           <button
             onClick={() => setPlaying(!playing)}
-            className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-elevated press"
+            disabled={generatingAudio}
+            className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-elevated press disabled:opacity-50"
           >
-            {playing ? <Pause className="w-6 h-6 text-primary-foreground" /> : <Play className="w-6 h-6 text-primary-foreground ml-0.5" />}
+            {generatingAudio ? (
+              <Loader2 className="w-6 h-6 text-primary-foreground animate-spin" />
+            ) : playing ? (
+              <Pause className="w-6 h-6 text-primary-foreground" />
+            ) : (
+              <Play className="w-6 h-6 text-primary-foreground ml-0.5" />
+            )}
           </button>
           <button onClick={() => setCurrentTime((t) => Math.min(totalTime, t + 10))} className="p-2 rounded-full hover:bg-secondary transition-colors">
             <SkipForward className="w-5 h-5 text-foreground" />
@@ -169,9 +210,9 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
         </div>
 
         {/* Bookmarks */}
-        {bookmarked.length > 0 && (
+        {bookmarks.length > 0 && (
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {bookmarked.map((ts, i) => (
+            {bookmarks.map((ts, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentTime(ts)}
@@ -186,7 +227,10 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
 
       {/* Questions */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Questions 1–4</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Questions 1–{totalQ}</h3>
+          <span className="text-xs text-muted-foreground">{answered}/{totalQ} answered</span>
+        </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
           Complete the form below. Write <span className="font-semibold text-foreground">NO MORE THAN TWO WORDS</span> for each answer.
         </p>
@@ -197,10 +241,12 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold mr-2">
                   {q.num}
                 </span>
-                {q.text}
+                {q.question}
               </label>
               <input
                 type="text"
+                value={answers[q.num] || ''}
+                onChange={(e) => updateAnswer(q.num, e.target.value)}
                 placeholder="Type your answer..."
                 className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
@@ -211,7 +257,20 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
 
       {/* Submit bar */}
       <div className="border-t border-border bg-card px-4 py-3 pb-safe">
-        <Button className="w-full h-12 text-sm">Submit Answers</Button>
+        <Button 
+          className="w-full h-12 text-sm" 
+          disabled={answered < totalQ || isSubmitting}
+          onClick={handleSubmit}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            `Submit Answers (${answered}/${totalQ})`
+          )}
+        </Button>
       </div>
     </div>
   );
@@ -220,19 +279,87 @@ const TestPlayer = ({ test, onClose }: { test: ListeningTest; onClose: () => voi
 /* ─── Main ─── */
 const ListeningPractice = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const { tests, loading: testsLoading, refetch: refetchTests } = useListeningTests();
+  const { progress, loading: progressLoading, getTestStatus, startTest, submitAnswers } = useUserListeningProgress();
+  const { stats } = useListeningStats();
   const [activeType, setActiveType] = useState("all");
   const [activeTest, setActiveTest] = useState<ListeningTest | null>(null);
+  const [generating, setGenerating] = useState(false);
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
-  }, []);
+  const loading = testsLoading || progressLoading;
 
-  const filtered = activeType === "" || activeType === "all" ? tests : tests.filter((t) => t.type === activeType);
+  const filtered = activeType === "" || activeType === "all" 
+    ? tests 
+    : tests.filter((t) => t.type === activeType);
+
+  const handleStartTest = async (test: ListeningTest) => {
+    await startTest(test.id);
+    setActiveTest(test);
+  };
+
+  const handleSubmit = async (answers: Record<number, string>, timeSpent: number) => {
+    if (!activeTest) return;
+    
+    // Build correct answers map
+    const correctAnswers: Record<number, string> = {};
+    activeTest.questions.forEach((q) => {
+      if (q.answer) correctAnswers[q.num] = q.answer;
+    });
+    
+    await submitAnswers(activeTest.id, answers, correctAnswers, timeSpent);
+    setActiveTest(null);
+    window.location.reload();
+  };
+
+  const generateNewTest = async () => {
+    setGenerating(true);
+    try {
+      // Generate using AI service
+      const { groqService } = await import('@/services/groq');
+      const test = await groqService.generateListeningTest({
+        section: activeType === 'form' || activeType === 'map' ? 1 : 
+                 activeType === 'matching' ? 2 : 
+                 activeType === 'mcq' ? 3 : 1,
+        difficulty: 'medium'
+      });
+
+      // Save to database
+      const { data, error } = await supabase
+        .from('listening_tests')
+        .insert({
+          title: test.title,
+          section: `Section ${test.section}: ${test.type}`,
+          type: test.type.toLowerCase(),
+          difficulty: 'medium',
+          duration_min: 30,
+          questions_count: test.questions.length,
+          transcript: test.transcript,
+          questions: test.questions,
+          ai_generated: true,
+          ai_model: 'llama-3.3-70b'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      await refetchTests();
+    } catch (err) {
+      console.error('Failed to generate test:', err);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   if (activeTest) {
-    return <TestPlayer test={activeTest} onClose={() => setActiveTest(null)} />;
+    const savedProgress = getTestStatus(activeTest.id);
+    return (
+      <TestPlayer 
+        test={activeTest} 
+        onClose={() => setActiveTest(null)}
+        savedProgress={savedProgress}
+        onSubmit={handleSubmit}
+      />
+    );
   }
 
   return (
@@ -247,7 +374,9 @@ const ListeningPractice = () => {
         </button>
         <div>
           <h1 className="text-2xl font-bold leading-8 text-foreground">Listening Practice</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">42 tests • 12 completed</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {tests.length} tests • {stats?.tests_completed || 0} completed
+          </p>
         </div>
       </div>
 
@@ -258,14 +387,33 @@ const ListeningPractice = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground">Focus: Multiple Choice (Section 3)</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Your weakest question type — 45% accuracy</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {stats?.avg_band ? `Your avg: Band ${stats.avg_band} — ` : ''}
+            Practice identifying speaker opinions
+          </p>
         </div>
-        <Button size="sm" className="h-8 text-xs shrink-0">Start</Button>
+        <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => setActiveType("mcq")}>Start</Button>
       </div>
 
       {/* Question Type Browser */}
       <div>
-        <h2 className="text-sm font-semibold text-foreground mb-3">By Question Type</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">By Question Type</h2>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-8 text-xs"
+            onClick={generateNewTest}
+            disabled={generating}
+          >
+            {generating ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3 mr-1" />
+            )}
+            Generate New
+          </Button>
+        </div>
         <QuestionTypeBrowser
           types={questionTypes}
           activeType={activeType}
@@ -295,92 +443,92 @@ const ListeningPractice = () => {
                   <ListItemSkeleton />
                 </div>
               ))
-            : filtered.map((test) => (
-                <button
-                  key={test.id}
-                  onClick={() => setActiveTest(test)}
-                  className="w-full bg-card rounded-xl border border-border p-4 text-left hover:shadow-elevated transition-all duration-200 press focus-ring group"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Play icon */}
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                      test.status === "completed"
-                        ? "bg-success/10"
-                        : test.status === "in-progress"
-                        ? "bg-primary/10"
-                        : "bg-secondary group-hover:bg-primary/10"
-                    }`}>
-                      {test.status === "completed" ? (
-                        <CheckCircle2 className="w-5 h-5 text-success" />
-                      ) : (
-                        <Play className={`w-5 h-5 ${test.status === "in-progress" ? "text-primary" : "text-muted-foreground group-hover:text-primary"} transition-colors`} />
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{test.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{test.section}</p>
-                        </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                          difficultyDot[test.difficulty] === "bg-success"
-                            ? "bg-success/10 text-success"
-                            : difficultyDot[test.difficulty] === "bg-warning"
-                            ? "bg-warning/10 text-warning"
-                            : "bg-destructive/10 text-destructive"
-                        }`}>
-                          {test.difficulty.charAt(0).toUpperCase() + test.difficulty.slice(1)}
-                        </span>
+            : filtered.map((test) => {
+                const savedProgress = getTestStatus(test.id);
+                const status = savedProgress?.status || 'new';
+                
+                return (
+                  <button
+                    key={test.id}
+                    onClick={() => handleStartTest(test)}
+                    className="w-full bg-card rounded-xl border border-border p-4 text-left hover:shadow-elevated transition-all duration-200 press focus-ring group"
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Play icon */}
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                        status === "completed"
+                          ? "bg-success/10"
+                          : status === "in-progress"
+                          ? "bg-primary/10"
+                          : "bg-secondary group-hover:bg-primary/10"
+                      }`}>
+                        {status === "completed" ? (
+                          <CheckCircle2 className="w-5 h-5 text-success" />
+                        ) : (
+                          <Play className={`w-5 h-5 ${status === "in-progress" ? "text-primary" : "text-muted-foreground group-hover:text-primary"} transition-colors`} />
+                        )}
                       </div>
 
-                      {/* Meta */}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {test.duration}</span>
-                        <span>{test.questions} questions</span>
-                      </div>
-
-                      {/* Progress */}
-                      {test.progress > 0 && (
-                        <div className="mt-2.5 space-y-1">
-                          <Progress value={test.progress} className="h-1.5" />
-                          <p className="text-[11px] text-muted-foreground">{test.progress}% completed</p>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{test.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{test.section}</p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                            difficultyDot[test.difficulty] === "bg-success"
+                              ? "bg-success/10 text-success"
+                              : difficultyDot[test.difficulty] === "bg-warning"
+                              ? "bg-warning/10 text-warning"
+                              : "bg-destructive/10 text-destructive"
+                          }`}>
+                            {test.difficulty.charAt(0).toUpperCase() + test.difficulty.slice(1)}
+                          </span>
                         </div>
-                      )}
 
-                      {/* Action */}
-                      <div className="mt-3 flex items-center gap-2">
-                        {test.status === "in-progress" ? (
-                          <>
+                        {/* Meta */}
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {test.duration_min} min</span>
+                          <span>{test.questions_count} questions</span>
+                          {test.ai_generated && (
+                            <span className="bg-primary/10 text-primary px-1.5 rounded">AI</span>
+                          )}
+                        </div>
+
+                        {/* Progress */}
+                        {status === 'completed' && savedProgress?.band_score && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-primary">
+                              Band {savedProgress.band_score}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              ({savedProgress.correct_count}/{test.questions_count} correct)
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Action */}
+                        <div className="mt-3 flex items-center gap-2">
+                          {status === "in-progress" ? (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
                               <Play className="w-3 h-3" /> Continue
                             </span>
-                            <span className="text-border">|</span>
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                              <RotateCcw className="w-3 h-3" /> Restart
-                            </span>
-                          </>
-                        ) : test.status === "completed" ? (
-                          <>
+                          ) : status === "completed" ? (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
                               <CheckCircle2 className="w-3 h-3" /> Completed
                             </span>
-                            <span className="text-border">|</span>
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                              <RotateCcw className="w-3 h-3" /> Retake
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary group-hover:underline underline-offset-2">
+                              Start Test <ChevronRight className="w-3 h-3" />
                             </span>
-                          </>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary group-hover:underline underline-offset-2">
-                            Start Test <ChevronRight className="w-3 h-3" />
-                          </span>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
         </div>
       </div>
     </div>

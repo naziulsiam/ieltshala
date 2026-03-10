@@ -24,7 +24,7 @@ const FlashcardMode = ({ words, onExit }: Props) => {
                 u.lang = "en-GB"; u.rate = 0.85;
                 window.speechSynthesis.cancel();
                 window.speechSynthesis.speak(u);
-            } catch { }
+            } catch { /* ignore */ }
         }
     }, [index, flipped, word]);
 

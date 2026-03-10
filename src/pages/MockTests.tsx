@@ -103,6 +103,7 @@ const MockTests = () => {
       });
     }, 1000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, activeMock]);
 
   const startMock = useCallback((mock: MockDef) => {

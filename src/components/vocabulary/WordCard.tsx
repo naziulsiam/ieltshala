@@ -59,7 +59,8 @@ const WordCard = ({
     const onTouchEnd = (e: React.TouchEvent) => {
         const diff = touchStartX.current - e.changedTouches[0].clientX;
         if (Math.abs(diff) > 60) {
-            diff > 0 ? handleNext() : handlePrev();
+            if (diff > 0) handleNext();
+            else handlePrev();
         }
     };
 

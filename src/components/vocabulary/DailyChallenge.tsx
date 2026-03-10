@@ -17,12 +17,12 @@ const DailyChallenge = ({ isPremium, onStartChallenge, onUpgrade }: DailyChallen
                 const today = new Date().toISOString().split("T")[0];
                 if (parsed.date === today) return parsed;
             }
-        } catch { }
+        } catch { /* ignore */ }
         return { date: new Date().toISOString().split("T")[0], completed: false, wordsCompleted: 0, target: 20, badgesEarned: 0 };
     });
 
     useEffect(() => {
-        try { localStorage.setItem("ieltshala-daily-challenge", JSON.stringify(challengeState)); } catch { }
+        try { localStorage.setItem("ieltshala-daily-challenge", JSON.stringify(challengeState)); } catch { /* ignore */ }
     }, [challengeState]);
 
     const badges = [

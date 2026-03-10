@@ -112,7 +112,8 @@ export function useVocabulary() {
     const toggleBookmark = useCallback((wordId: string) => {
         setState(s => {
             const bm = new Set(s.bookmarks);
-            bm.has(wordId) ? bm.delete(wordId) : bm.add(wordId);
+            if (bm.has(wordId)) bm.delete(wordId);
+            else bm.add(wordId);
             return { ...s, bookmarks: bm };
         });
     }, []);

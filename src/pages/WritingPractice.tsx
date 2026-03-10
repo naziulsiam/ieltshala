@@ -395,9 +395,8 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
             <Target className="w-3.5 h-3.5 text-accent" />
             <span className="text-xs font-semibold text-foreground">Band 7.0</span>
           </div>
-          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 border ${
-            isLowTime ? "bg-destructive/10 border-destructive/30 animate-pulse" : "bg-card border-border"
-          }`}>
+          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 border ${isLowTime ? "bg-destructive/10 border-destructive/30 animate-pulse" : "bg-card border-border"
+            }`}>
             <Timer className={`w-3.5 h-3.5 ${isLowTime ? "text-destructive" : "text-muted-foreground"}`} />
             <span className={`text-xs font-semibold ${isLowTime ? "text-destructive" : "text-foreground"}`}>{fmt(timeLeft)}</span>
           </div>
@@ -552,11 +551,10 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
                           <button
                             key={band}
                             onClick={() => setSelectedBand(band)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all press ${
-                              selectedBand === band
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all press ${selectedBand === band
                                 ? parseFloat(band) >= 7.5 ? "bg-success text-success-foreground" : parseFloat(band) >= 7 ? "bg-primary text-primary-foreground" : parseFloat(band) >= 6.5 ? "bg-warning text-warning-foreground" : "bg-destructive/80 text-destructive-foreground"
                                 : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                            }`}
+                              }`}
                           >
                             {band}
                           </button>
@@ -706,11 +704,10 @@ const WritingEditor = ({ topic, onBack }: { topic: WritingTopic; onBack: () => v
                       <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors press ${
-                          filter === f
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors press ${filter === f
                             ? f === "all" ? "bg-secondary text-foreground" : `${typeConfig[f].bg} ${typeConfig[f].text}`
                             : "bg-secondary/50 text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         {f === "all" ? "All" : typeConfig[f].label} ({count})
                       </button>
@@ -814,16 +811,15 @@ const WritingPractice = () => {
       </div>
 
       {/* Task Selector Tabs */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
         {(["task1", "task2"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); setActiveSubType(null); }}
-            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all press focus-ring ${
-              activeTab === tab
+            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all press focus-ring shrink-0 whitespace-nowrap ${activeTab === tab
                 ? "bg-accent text-accent-foreground shadow-sm"
                 : "bg-card text-muted-foreground hover:bg-secondary border border-border"
-            }`}
+              }`}
           >
             {tab === "task1" ? "Task 1: Graph / Letter" : "Task 2: Essay"}
           </button>
@@ -843,17 +839,15 @@ const WritingPractice = () => {
               <button
                 key={qt.id}
                 onClick={() => setActiveSubType(isActive ? null : qt.id)}
-                className={`rounded-xl p-3.5 text-left transition-all duration-200 press focus-ring border group ${
-                  isActive
+                className={`rounded-xl p-3.5 text-left transition-all duration-200 press focus-ring border group ${isActive
                     ? "bg-accent/5 border-accent/30 shadow-sm"
                     : "bg-card border-border hover:border-accent/20 hover:shadow-card"
-                }`}
+                  }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 transition-colors ${
-                  isActive
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 transition-colors ${isActive
                     ? "bg-accent text-accent-foreground"
                     : "bg-secondary text-muted-foreground group-hover:bg-accent/10 group-hover:text-accent"
-                }`}>
+                  }`}>
                   <Icon className="w-4 h-4" />
                 </div>
                 <p className="text-xs font-semibold text-foreground">{qt.label}</p>

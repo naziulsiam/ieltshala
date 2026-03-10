@@ -65,7 +65,7 @@ const Dashboard = () => {
         </Link>
 
         {/* Secondary tasks — smaller, grouped */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {todayPlan.slice(1).map((item) => (
             <Link key={item.title} to={item.to} className="block">
               <div className="bg-card rounded-xl shadow-card card-interactive p-4 h-full">
@@ -137,11 +137,10 @@ const Dashboard = () => {
               <div key={day} className="flex-1 flex flex-col items-center gap-1">
                 <div className="w-full flex items-end justify-center" style={{ height: maxH }}>
                   <div
-                    className={`w-full max-w-[28px] rounded transition-all duration-300 ${
-                      weekMins[i] > 0
+                    className={`w-full max-w-[28px] rounded transition-all duration-300 ${weekMins[i] > 0
                         ? isToday ? "bg-accent" : "bg-primary/60 hover:bg-primary/80"
                         : "bg-border"
-                    }`}
+                      }`}
                     style={{ height: h }}
                   />
                 </div>

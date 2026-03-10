@@ -47,25 +47,25 @@ const VocabularyHeader = ({
             </div>
 
             {/* Stats row */}
-            <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-1.5 shadow-card text-xs font-semibold">
+            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 pb-1">
+                <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-1.5 shadow-card text-xs font-semibold shrink-0">
                     <BookOpen className="w-3.5 h-3.5 text-primary" />
                     <span className="text-primary">{totalLearned}</span>
                     <span className="text-muted-foreground">/{isPremium ? "3000" : "500"}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-1.5 shadow-card text-xs font-semibold">
+                <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-1.5 shadow-card text-xs font-semibold shrink-0">
                     <Flame className="w-3.5 h-3.5 text-accent" />
                     <span className="text-accent">{streak} days</span>
                     <span>🔥</span>
                 </div>
-                <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${masteryColor}`}>
+                <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shrink-0 ${masteryColor}`}>
                     <Award className="w-3.5 h-3.5" />
                     {masteryLabel}
                 </div>
 
                 {/* Free user daily word counter badge */}
                 {!isPremium && (
-                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${hasHitDailyLimit ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"
+                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap ${hasHitDailyLimit ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"
                         }`}>
                         {hasHitDailyLimit ? <Lock className="w-3 h-3" /> : <span className="text-xs">📖</span>}
                         Today: {dailyRemaining}/{dailyLimit} remaining
@@ -75,8 +75,8 @@ const VocabularyHeader = ({
 
             {/* Daily Goal Card */}
             <div className={`rounded-2xl p-5 shadow-card border ${hasHitDailyLimit
-                    ? "bg-gradient-to-r from-destructive/5 via-warning/5 to-destructive/5 border-destructive/10"
-                    : "bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/10"
+                ? "bg-gradient-to-r from-destructive/5 via-warning/5 to-destructive/5 border-destructive/10"
+                : "bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border-primary/10"
                 }`}>
                 <div className="flex items-center justify-between mb-3">
                     <div>

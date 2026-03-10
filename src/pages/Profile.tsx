@@ -44,7 +44,7 @@ const settings = [
 ];
 
 const Profile = () => (
-  <div className="p-4 md:p-6 max-w-[960px] mx-auto space-y-6">
+  <div className="p-4 md:p-6 max-w-[960px] mx-auto space-y-6 pb-28 md:pb-6">
     {/* Profile Header */}
     <div className="bg-card rounded-xl p-5 shadow-card flex items-center gap-4">
       <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-xl font-bold text-primary shrink-0">
@@ -78,18 +78,16 @@ const Profile = () => (
           return (
             <div
               key={badge.title}
-              className={`relative flex flex-col items-center text-center p-3.5 rounded-xl transition-all ${
-                badge.unlocked
+              className={`relative flex flex-col items-center text-center p-3.5 rounded-xl transition-all ${badge.unlocked
                   ? "bg-card shadow-card ring-1 " + cfg.ring
                   : "bg-secondary/50 opacity-50"
-              }`}
+                }`}
             >
               <div
-                className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2.5 ${
-                  badge.unlocked
+                className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2.5 ${badge.unlocked
                     ? `bg-gradient-to-br ${cfg.gradient} text-primary-foreground`
                     : "bg-muted text-muted-foreground"
-                }`}
+                  }`}
               >
                 {badge.unlocked ? (
                   <badge.icon className="w-5 h-5" />

@@ -26,7 +26,7 @@ const HalaChatButton = () => {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-20 md:bottom-6 right-4 z-50 w-12 h-12 rounded-full bg-accent text-accent-foreground shadow-elevated flex items-center justify-center hover:scale-105 transition-transform press pulse-glow"
+          className="fixed bottom-36 md:bottom-6 right-4 z-50 w-12 h-12 rounded-full bg-accent text-accent-foreground shadow-elevated flex items-center justify-center hover:scale-105 transition-transform press pulse-glow"
           aria-label="Open AI Tutor Chat"
         >
           <MessageCircle className="w-5 h-5" />
@@ -52,11 +52,10 @@ const HalaChatButton = () => {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.from === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                    m.from === "user"
+                  className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed ${m.from === "user"
                       ? "bg-primary text-primary-foreground rounded-br-sm"
                       : "bg-secondary text-foreground rounded-bl-sm"
-                  }`}
+                    }`}
                 >
                   {m.text}
                 </div>
